@@ -1,3 +1,7 @@
-streamlit==1.36.0
-tensorflow==2.16.1
-pillow==10.3.0 --only-binary=:all:
+numpy==1.18.0
+pandas==1.0.1
+Pillow==7.0.0
+plotly==4.7.1
+streamlit==0.58.0
+tensorflow==1.14.0
+Keras==2.2.5
