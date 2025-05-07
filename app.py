@@ -32,7 +32,7 @@ if uploaded_file is not None:
     with open(os.path.join("temp.jpg"), "wb") as f:
         f.write(uploaded_file.getbuffer())
 
-    img = image.load_img("temp.jpg", target_size=(224, 224))
+    img = image.load_img(uploaded_file, target_size=(75, 100))
     img_array = image.img_to_array(img) / 255.0
     img_array = np.expand_dims(img_array, axis=0)
 
