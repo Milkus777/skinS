@@ -1,163 +1,65 @@
 import streamlit as st
 import numpy as np
-import pandas as pd
-import tensorflow.keras  # ← Изменено: используем tensorflow.keras
-from tensorflow.keras.models import load_model  # ← Используем из tensorflow
-from tensorflow.keras.utils import to_categorical  # ← Теперь так
-import os
-import time
 from PIL import Image
-import plotly.express as px
+import tensorflow as tf
 
-MODELSPATH = './models/'
-DATAPATH = './data/'
+# Настройки страницы
+st.set_page_config(page_title="Диагностика кожных заболеваний", page_icon="🩺", layout="centered")
 
+# Загрузка модели
+@st.cache_resource
+def load_model():
+    return tf.keras.models.load_model("model.keras")
 
-def render_header():
-    st.write("""
-        <p align="center"> 
-            <H1> Skin cancer Analyzer 
-        </p>
+model = load_model()
 
-    """, unsafe_allow_html=True)
+# Словарь классов (взят из ноутбука)
+class_names_ru = [
+    'Меланоцитарные невусы',
+    'Меланома',
+    'Доброкачественные кератозоподобные поражения',
+    'Базальноклеточная карцинома',
+    'Актинические кератозы',
+    'Сосудистые поражения',
+    'Дерматофиброма'
+]
 
+# Баннер / приветствие
+st.markdown("<h1 style='text-align: center; color: #2E8B57;'>🩺 Диагностика кожных заболеваний</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Загрузите фото кожи, чтобы получить диагноз от нейросети.</p>", unsafe_allow_html=True)
 
-@st.cache
-def load_mekd():
-    img = Image.open(DATAPATH + '/ISIC_0024312.jpg')
-    return img
+# Контейнер загрузки изображения
+uploaded_file = st.file_uploader("Выберите изображение...", type=["jpg", "jpeg", "png"])
 
+if uploaded_file is not None:
+    image = Image.open(uploaded_file).convert("RGB")
+    image = image.resize((100, 75))  # Точный размер: ширина=100, высота=75
+    img_array = np.array(image) / 255.0  # Нормализация
+    img_array = np.expand_dims(img_array, axis=0).astype(model.input.dtype)
 
-@st.cache
-def data_gen(x):
-    img = np.asarray(Image.open(x).resize((100, 75)))
-    x_test = np.asarray(img.tolist())
-    x_test_mean = np.mean(x_test)
-    x_test_std = np.std(x_test)
-    x_test = (x_test - x_test_mean) / x_test_std
-    x_validate = x_test.reshape(1, 75, 100, 3)
+    with st.spinner('🧠 Обрабатываем изображение...'):
+        predictions = model.predict(img_array)[0]
+    
+    # Отображение результата
+    st.image(image, caption="Ваше изображение", use_column_width=True)
 
-    return x_validate
+    st.subheader("🔍 Результат анализа:")
+    max_prob = 0
+    predicted_class = ""
 
+    prediction_text = ""
+    for i, class_name in enumerate(class_names_ru):
+        prob_percent = round(predictions[i] * 100, 2)
+        if prob_percent > max_prob:
+            max_prob = prob_percent
+            predicted_class = class_name
+        prediction_text += f"- {class_name}: {prob_percent}%\n"
 
-@st.cache
-def data_gen_(img):
-    img = img.reshape(100, 75)
-    x_test = np.asarray(img.tolist())
-    x_test_mean = np.mean(x_test)
-    x_test_std = np.std(x_test)
-    x_test = (x_test - x_test_mean) / x_test_std
-    x_validate = x_test.reshape(1, 75, 100, 3)
+    st.markdown(f"**С уверенностью {max_prob}% это {predicted_class}**")
+    st.text_area("Подробности:", value=prediction_text, height=200, disabled=True)
 
-    return x_validate
+else:
+    st.info("📸 Пожалуйста, загрузите изображение для анализа.")
 
-
-def load_models():
-
-    model = load_model(MODELSPATH + 'model.keras')
-    return model
-
-
-@st.cache
-def predict(x_test, model):
-    Y_pred = model.predict(x_test)
-    ynew = model.predict_proba(x_test)
-    K.clear_session()
-    ynew = np.round(ynew, 2)
-    ynew = ynew*100
-    y_new = ynew[0].tolist()
-    Y_pred_classes = np.argmax(Y_pred, axis=1)
-    K.clear_session()
-    return y_new, Y_pred_classes
-
-
-@st.cache
-def display_prediction(y_new):
-    """Display image and preditions from model"""
-
-    result = pd.DataFrame({'Probability': y_new}, index=np.arange(7))
-    result = result.reset_index()
-    result.columns = ['Classes', 'Probability']
-    lesion_type_dict = {2: 'Benign keratosis-like lesions', 4: 'Melanocytic nevi', 3: 'Dermatofibroma',
-                        5: 'Melanoma', 6: 'Vascular lesions', 1: 'Basal cell carcinoma', 0: 'Actinic keratoses'}
-    result["Classes"] = result["Classes"].map(lesion_type_dict)
-    return result
-
-
-def main():
-    st.sidebar.header('Skin cancer Analyzer')
-    st.sidebar.subheader('Choose a page to proceed:')
-    page = st.sidebar.selectbox("", ["Sample Data", "Upload Your Image"])
-
-    if page == "Sample Data":
-        st.header("Sample Data Prediction for Skin Cancer")
-        st.markdown("""
-        **Now, this is probably why you came here. Let's get you some Predictions**
-
-        You need to choose Sample Data
-        """)
-
-        mov_base = ['Sample Data I']
-        movies_chosen = st.multiselect('Choose Sample Data', mov_base)
-
-        if len(movies_chosen) > 1:
-            st.error('Please select Sample Data')
-        if len(movies_chosen) == 1:
-            st.success("You have selected Sample Data")
-        else:
-            st.info('Please select Sample Data')
-
-        if len(movies_chosen) == 1:
-            if st.checkbox('Show Sample Data'):
-                st.info("Showing Sample data---->>>")
-                image = load_mekd()
-                st.image(image, caption='Sample Data', use_column_width=True)
-                st.subheader("Choose Training Algorithm!")
-                if st.checkbox('Keras'):
-                    model = load_models()
-                    st.success("Hooray !! Keras Model Loaded!")
-                    if st.checkbox('Show Prediction Probablity on Sample Data'):
-                        x_test = data_gen(DATAPATH + '/ISIC_0024312.jpg')
-                        y_new, Y_pred_classes = predict(x_test, model)
-                        result = display_prediction(y_new)
-                        st.write(result)
-                        if st.checkbox('Display Probability Graph'):
-                            fig = px.bar(result, x="Classes",
-                                         y="Probability", color='Classes')
-                            st.plotly_chart(fig, use_container_width=True)
-
-    if page == "Upload Your Image":
-
-        st.header("Upload Your Image")
-
-        file_path = st.file_uploader('Upload an image', type=['png', 'jpg'])
-
-        if file_path is not None:
-            x_test = data_gen(file_path)
-            image = Image.open(file_path)
-            img_array = np.array(image)
-
-            st.success('File Upload Success!!')
-        else:
-            st.info('Please upload Image file')
-
-        if st.checkbox('Show Uploaded Image'):
-            st.info("Showing Uploaded Image ---->>>")
-            st.image(img_array, caption='Uploaded Image',
-                     use_column_width=True)
-            st.subheader("Choose Training Algorithm!")
-            if st.checkbox('Keras'):
-                model = load_models()
-                st.success("Hooray !! Keras Model Loaded!")
-                if st.checkbox('Show Prediction Probablity for Uploaded Image'):
-                    y_new, Y_pred_classes = predict(x_test, model)
-                    result = display_prediction(y_new)
-                    st.write(result)
-                    if st.checkbox('Display Probability Graph'):
-                        fig = px.bar(result, x="Classes",
-                                     y="Probability", color='Classes')
-                        st.plotly_chart(fig, use_container_width=True)
-
-
-if __name__ == "__main__":
-    main()
+# Футер
+st.markdown("<hr><p style='text-align:center;'>Made with ❤️ using Streamlit & TensorFlow</p>", unsafe_allow_html=True)
