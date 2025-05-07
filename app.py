@@ -1,13 +1,11 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import keras
-from keras.utils.np_utils import to_categorical
-from keras.models import Sequential, load_model
-from keras import backend as K
+import tensorflow.keras  # ← Изменено: используем tensorflow.keras
+from tensorflow.keras.models import load_model  # ← Используем из tensorflow
+from tensorflow.keras.utils import to_categorical  # ← Теперь так
 import os
 import time
-import io
 from PIL import Image
 import plotly.express as px
 
