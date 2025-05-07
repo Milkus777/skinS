@@ -2,18 +2,14 @@ import streamlit as st
 import numpy as np
 from PIL import Image
 import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, Activation, InputLayer
+from tensorflow.keras import layers, models
 
 # Настройки страницы
 st.set_page_config(page_title="Диагностика кожных заболеваний", page_icon="🩺", layout="centered")
 
-# Загрузка модели
-@st.cache_resource
-def load_model():
-    return tf.keras.models.load_model("model.h5")
-
-model = load_model()
-
-# Словарь классов (взят из ноутбука)
+# Словарь классов (из Colab-скрипта)
 class_names_ru = [
     'Меланоцитарные невусы',
     'Меланома',
@@ -24,30 +20,65 @@ class_names_ru = [
     'Дерматофиброма'
 ]
 
-# Баннер / приветствие
+# Архитектура модели (копия из Colab)
+def build_model():
+    model = Sequential()
+    model.add(InputLayer(input_shape=(75, 100, 3)))  # ← ВАЖНО! Явно указываем вход
+    model.add(Conv2D(filters=16, kernel_size=2, padding='same'))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=2))
+    model.add(Conv2D(filters=32, kernel_size=2, activation='relu', padding='same'))
+    model.add(MaxPooling2D(pool_size=2))
+    model.add(Conv2D(filters=64, kernel_size=2, activation='relu', padding='same'))
+    model.add(MaxPooling2D(pool_size=2))
+    model.add(Conv2D(filters=128, kernel_size=2, activation='relu', padding='same'))
+    model.add(MaxPooling2D(pool_size=2))
+    model.add(Dropout(0.3))
+    model.add(Flatten())
+    model.add(Dense(150))
+    model.add(Activation('relu'))
+    model.add(Dropout(0.4))
+    model.add(Dense(7, activation='softmax'))
+
+    model.compile(loss='categorical_crossentropy',
+                  optimizer='rmsprop',
+                  metrics=['accuracy'])
+    return model
+
+# Загрузка модели
+@st.cache_resource
+def load_model():
+    model = build_model()
+    model.load_weights("model.h5")  # или model.keras
+    dummy_input = np.zeros((1, 75, 100, 3))
+    model.predict(dummy_input)  # Прогреваем модель
+    return model
+
+model = load_model()
+
+# Интерфейс
 st.markdown("<h1 style='text-align: center; color: #2E8B57;'>🩺 Диагностика кожных заболеваний</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Загрузите фото кожи, чтобы получить диагноз от нейросети.</p>", unsafe_allow_html=True)
 
-# Контейнер загрузки изображения
 uploaded_file = st.file_uploader("Выберите изображение...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file).convert("RGB")
     image = image.resize((100, 75))  # Точный размер: ширина=100, высота=75
-    img_array = np.array(image) / 255.0  # Нормализация
+    img_array = np.array(image) / 255.0  # Нормализация [0, 1]
     img_array = np.expand_dims(img_array, axis=0).astype(model.input.dtype)
 
     with st.spinner('🧠 Обрабатываем изображение...'):
         predictions = model.predict(img_array)[0]
-    
+
     # Отображение результата
     st.image(image, caption="Ваше изображение", use_column_width=True)
 
     st.subheader("🔍 Результат анализа:")
     max_prob = 0
     predicted_class = ""
-
     prediction_text = ""
+
     for i, class_name in enumerate(class_names_ru):
         prob_percent = round(predictions[i] * 100, 2)
         if prob_percent > max_prob:
