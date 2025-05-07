@@ -47,7 +47,7 @@ def build_model():
 @st.cache_resource
 def load_model():
     model = build_model()
-    model.load_weights("full_model.keras")  # или full_model.h5
+    model.load_weights("model.keras")  # или full_model.h5
 
     # Прогреваем модель dummy-батчем
     dummy_input = np.zeros((1, 75, 100, 3))
